@@ -4,13 +4,20 @@
 echo
 echo This is an idempodent script to install foreman from on fresh Redhat 7.3 system.
 echo
-echo 6.26.2017: this script needs 2  bug fixes: -Mamun
-echo  a. save the admin password from foreman-installer script to a file
-echo  b. change  the decision criteria to run foreman-installer to count how many forman and puppet yum packages are installed: about 10 total
-echo
-echo ENTER to continue
-echo n
 sleep 1
+
+# ensure that this is running on a Red Hat box:
+COUNT_RED=`grep Red /etc/redhat-release|wc -l`
+
+if [ "$COUNT_RED" -gt "0" ];
+ then
+   echo This is Red Hat System. Good.
+   cat /etc/redhat-release
+ else
+   echo This is not Red Hat a system. Cann not proceeed. Exiting.
+   exit 3
+fi
+
 
 
 # VARIABLES SECTION
@@ -103,7 +110,7 @@ fi
 COUNT3=`subscription-manager repos --list | grep Name | wc -l`
 if [ "$COUNT3" -gt "50" ];
  then
-   echo we have more than 50 repos. we are probbaly good to proceed.
+   echo we have more than $COUNT3 repos. we are probbaly good to proceed.
  else
    echo this machine has less 50 repos. expected around 100. executing auto attach command
    subscription-manager attach --auto
@@ -228,6 +235,7 @@ if [ "$COUNT8" -gt "0" ];
 fi
 
 
+
 # FOREMAN_INSTALLER
 #precheck and execution
 PCK9=foreman-installer
@@ -252,49 +260,31 @@ fi
 
 
 
-
-
-
-
-
-
-
-
-
-
 # DECISION TO RUN foreman-installer or not
 #
-INS_FILE=/var/log/foreman-installer/foreman.log
-if [ -f  $INS_FILE ]
- then
-   echo $INS_FILE file exists
-   LOG_FILE=1
- else
-   echo $INS_FILE file does not exist
-   LOG_FILE=0
-fi
 
-COUNTP=`ps -ef | grep foreman | grep -v grep |wc -l`
-echo $COUNTP
-if [ $COUNTP -gt "2" ]; then
-   echo 3 or more foreman processes running. probbaly means install is complete
-   PROCESS=1
+COUNTP=`yum list  installed | egrep "^foreman|^puppet" | wc -l`
+echo
+echo Number of foreman and puppet packages: $COUNTP
+echo Expect 13 when foreman-installer finishes successfully
+echo
+sleep 1
+if [ $COUNTP -gt "12" ]; then
+   echo
+   echo there are enough foreman and puppet packages installed to to suggest that
+   echo foreman-installer does not need to run again
+   echo
 else
-   echo 2 or less foreman processes running. probably means install is NOT complete.
-   PROCESS=0
-fi
-
-if [ $LOG_FILE -eq "0" ] && [ $PROCESS -eq "0" ]; then
-      echo  $INS_FILE log file does not exist and foreman process is not running
-      echo safe to run foreman_installer
-      echo running foreman-installer
-      sleep 2
-      foreman-installer
-      CAPTURE=$?
-      echo
-      echo foreman-installer executed
-      echo
-      if [ "$CAPTURE" -gt "0" ];
+   echo
+   echo foreman-installer needs to run because foreman and puppet packages are not installed.
+   echo running foreman-installer
+   sleep 2
+   foreman-installer
+   CAPTURE=$?
+   echo
+   echo foreman-installer executed
+   echo
+   if [ "$CAPTURE" -gt "0" ];
        then
          echo  WARNING:foreman-installer probbaly did not succeed. exit-code non-zero.
          sleep 1
@@ -303,12 +293,23 @@ if [ $LOG_FILE -eq "0" ] && [ $PROCESS -eq "0" ]; then
          sleep 1
          echo post-check: checking that http and https are now open on this host. If not, foreman is not fully up and running.
          netstat -a | grep LISTEN | grep -v ING | grep http
-       fi
-  else
-      echo either foreman-installer exists OR foreman process is already running
-      echo NOT running foreman-installer
+   fi
 fi
 
+echo
+echo post-check:
+echo Number of foreman and puppet packages: $COUNTP
+echo Expect 13 when foreman-installer finishes successfully
+echo
+
+echo
+echo URL
+foreman-installer -h  | grep url | grep current | grep base | grep foreman | cut -d: -f2-9
+echo admin password:
+foreman-installer -h  | grep password | grep current | grep random | cut -d: -f2 | cut -d\) -f1
+echo
 
 
+
+exit 0
 
